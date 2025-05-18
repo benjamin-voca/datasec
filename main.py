@@ -35,15 +35,6 @@ class TripleDESApp(tk.Tk):
         self.iv_entry.pack(side='left', fill='x', expand=True)
         tk.Button(iv_frame, text="Generate IV", command=self.generate_iv).pack(side='left', padx=(5, 0))
 
-        tk.Label(self, text="IV (16 hex chars):").pack(anchor='w', padx=10, pady=(10, 0))
-        iv_frame = tk.Frame(self)
-        iv_frame.pack(fill='x', padx=10)
-        self.iv_entry = tk.Entry(iv_frame)
-        self.iv_entry.pack(side='left', fill='x', expand=True)
-        tk.Button(iv_frame, text="Generate IV", command=self.generate_iv).pack(side='left', padx=(5, 0))
-
-
-
         self.action = tk.StringVar(value="encrypt")
         tk.Radiobutton(self, text="Encrypt", variable=self.action, value="encrypt").pack(anchor='w', padx=10, pady=(10, 0))
         tk.Radiobutton(self, text="Decrypt", variable=self.action, value="decrypt").pack(anchor='w', padx=10)
