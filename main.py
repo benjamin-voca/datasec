@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox
 import binascii
 from Crypto.Cipher import DES3
 from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 
 class TripleDESApp(tk.Tk):
     def __init__(self):
@@ -34,6 +35,14 @@ class TripleDESApp(tk.Tk):
         self.iv_entry.pack(side='left', fill='x', expand=True)
         tk.Button(iv_frame, text="Generate IV", command=self.generate_iv).pack(side='left', padx=(5, 0))
 
+        tk.Label(self, text="IV (16 hex chars):").pack(anchor='w', padx=10, pady=(10, 0))
+        iv_frame = tk.Frame(self)
+        iv_frame.pack(fill='x', padx=10)
+        self.iv_entry = tk.Entry(iv_frame)
+        self.iv_entry.pack(side='left', fill='x', expand=True)
+        tk.Button(iv_frame, text="Generate IV", command=self.generate_iv).pack(side='left', padx=(5, 0))
+
+
 
         self.action = tk.StringVar(value="encrypt")
         tk.Radiobutton(self, text="Encrypt", variable=self.action, value="encrypt").pack(anchor='w', padx=10, pady=(10, 0))
@@ -61,11 +70,18 @@ class TripleDESApp(tk.Tk):
         self.iv_entry.delete(0, tk.END)
         self.iv_entry.insert(0, iv_hex)
 
+    def generate_iv(self):
+        raw = get_random_bytes(8)
+        iv_hex = binascii.hexlify(raw).upper().decode()
+        self.iv_entry.delete(0, tk.END)
+        self.iv_entry.insert(0, iv_hex)
+
     def run_action(self):
         infile = self.file_entry.get()
         key_hex = self.key_entry.get().strip()
         iv_hex = self.iv_entry.get().strip()
         action = self.action.get()
+
 
         if not infile or not key_hex or not iv_hex:
             messagebox.showerror("Error", "All fields are required.")
@@ -78,26 +94,57 @@ class TripleDESApp(tk.Tk):
             return
 
         try:
-            binascii.unhexlify(key_hex)
-            binascii.unhexlify(iv_hex)
+
+            key_bytes_test = binascii.unhexlify(key_hex)
+            iv_bytes_test = binascii.unhexlify(iv_hex)
+            if len(key_bytes_test) != 16:  # Should be caught by len(key_hex) != 32 but good to double check bytes
+                messagebox.showerror("Error", "Key after hex conversion is not 16 bytes.")
+                return
+            if len(iv_bytes_test) != 8:  # Should be caught by len(iv_hex) != 16
+                messagebox.showerror("Error", "IV after hex conversion is not 8 bytes.")
+                return
         except binascii.Error as e:
             messagebox.showerror("Error", f"Invalid hex string for Key or IV: {e}")
             return
         except Exception as e:
-            messagebox.showerror("Error", f"Error processing Key/IV: {e}")
+            messagebox.showerror("Error", f"Unexpected error validating Key/IV: {e}")
             return
 
-        messagebox.showinfo("Action", f"Action: {action}\nFile: {infile}\nKey: {key_hex[:8]}...\nIV: {iv_hex[:8]}...\n\n(Crypto operation not yet implemented)")
+        try:
+            with open(infile, 'rb') as f:
+                data = f.read()
 
+            result = self.triple_des_cbc(data, key_hex, iv_hex, encrypt=(action == "encrypt"))
 
+            outfile = infile + ('.enc' if action == 'encrypt' else '.dec')
+            # Ensure the decrypted file doesn't overwrite original if names collide by bad luck
+            if action == 'decrypt' and infile.endswith('.enc') and outfile == infile:
+                outfile = infile[:-4] + '.dec'  # e.g. file.enc.dec
+                if outfile == infile:  # if original was file.enc.dec already
+                    outfile = infile + ".decrypted"
+
+            with open(outfile, 'wb') as f:
+                f.write(result)
+            messagebox.showinfo("Success", f"Output written to:\n{outfile}")
+        except FileNotFoundError:
+            messagebox.showerror("Error", f"Input file not found:\n{infile}")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
     def triple_des_cbc(self, data: bytes, key_hex: str, iv_hex: str, encrypt: bool) -> bytes:
-        print(f"Placeholder: triple_des_cbc called. Encrypt: {encrypt}")
-        print(f"Data length: {len(data)}, Key: {key_hex}, IV: {iv_hex}")
+        key = binascii.unhexlify(key_hex)
+        iv = binascii.unhexlify(iv_hex)
+        key = DES3.adjust_key_parity(key)
+        cipher = DES3.new(key, DES3.MODE_CBC, iv=iv)
         if encrypt:
-            return b"encrypted_placeholder_data"
+            return cipher.encrypt(pad(data, DES3.block_size))
         else:
-            return b"decrypted_placeholder_data"
+            decrypted_data = cipher.decrypt(data)
+            try:
+                return unpad(decrypted_data, DES3.block_size)
+            except ValueError as e:
+                raise ValueError(f"Decryption failed. Incorrect key, IV, or data corruption? (Padding error: {e})")
+
 
 if __name__ == '__main__':
     app = TripleDESApp()
